@@ -46,6 +46,35 @@ func @launch(%h_out : memref<?xf32>, %h_in : memref<?xf32>, %n : i64) {
 ## MLIR JIT
 mlir-cpu-runner
 
+## Heterogeneous Memory Dialects
+
+### [Remotable Pointers (CIRA)](remotable_pointer.md)
+
+For CXL-attached and disaggregated memory systems, standard `memref` abstractions are insufficient. The CIRA dialect introduces remotable pointer types that enable:
+
+- **Asynchronous memory access**: Decouple load initiation from value consumption
+- **Prefetch streams**: Compiler-directed prefetching for pointer-chasing workloads
+- **Heterogeneous execution**: Offload memory management to near-memory accelerators
+
+Key types:
+```mlir
+!cira.handle<T>   // Pointer to CXL-resident data
+!cira.future<T>   // In-flight async load token
+!cira.stream      // Recurring access pattern descriptor
+```
+
+Example transformation:
+```mlir
+// Before: Serial pointer chase (stalls on CXL latency)
+%next = cira.load %node[1] : !cira.handle<Node> -> !cira.handle<Node>
+
+// After: Stream-based prefetch (data arrives from LLC)
+%stream = cira.stream_create_indirect %head, %offset : ...
+cira.offload @vortex { cira.prefetch_chain %stream, %depth }
+%future = cira.peek_stream %stream : !cira.stream -> !cira.future<Node>
+%next = cira.await %future : !cira.future<Node> -> !cira.handle<Node>
+```
+
 ## Write a pass that emit two dialect
 ### Conversion
 MLIR to MLIR rewrite.
